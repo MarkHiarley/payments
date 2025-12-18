@@ -1,0 +1,27 @@
+Criar arquivos de migarte
+
+migrate create -ext sql -dir ./migrations -seq create_users_table
+
+chmod +x RUN_MIGRATIONS
+
+
+# 1. REVERTER A ÚLTIMA MIGRATION
+migrate -path ./migrations -database "$DB_URL" down 1
+
+# 2. REVERTER TODAS AS MIGRATIONS
+migrate -path ./migrations -database "$DB_URL" down
+
+# 3. REVERTER MÚLTIPLAS MIGRATIONS (exemplo: 2 últimas)
+migrate -path ./migrations -database "$DB_URL" down 2
+
+# 4. IR PARA UMA VERSÃO ESPECÍFICA
+migrate -path ./migrations -database "$DB_URL" goto 1
+
+# 5. FORÇAR UMA VERSÃO (útil quando há dirty state)
+migrate -path ./migrations -database "$DB_URL" force 2
+
+
+
+migrate -path ./migrations \                                                       1 ✘ 
+  -database "postgres://chat_user_secure:SecurePass2024@localhost:15432/chatapp_database?sslmode=disable" \
+  force 2
