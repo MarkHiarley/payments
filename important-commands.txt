@@ -2,7 +2,7 @@ Criar arquivos de migarte
 
 migrate create -ext sql -dir ./internal/database/migrations -seq create_users_table
 
-chmod +x RUN_MIGRATIONS
+chmod +x run-migrations.sh
 
 
 # 1. REVERTER A ÚLTIMA MIGRATION

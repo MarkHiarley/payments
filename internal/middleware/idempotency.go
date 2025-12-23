@@ -1,0 +1,33 @@
+package middleware
+
+import (
+	"context"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+type RedisTransactionStore struct {
+	dbr *redis.Client
+}
+
+func NewRedisTransactionStore(dbr *redis.Client) *RedisTransactionStore {
+	return &RedisTransactionStore{
+		dbr: dbr,
+	}
+}
+
+func (rts *RedisTransactionStore) IsNew(ctx context.Context, key string, value string) (bool, error) {
+
+	success, err := rts.dbr.SetNX(ctx, key, "PROCESSING", 1*time.Minute).Result()
+
+	if err != nil {
+		return false, err
+	}
+
+	return success, nil
+}
+
+func (rts *RedisTransactionStore) Delete(ctx context.Context, key string) error {
+	return rts.dbr.Del(ctx, key).Err()
+}
