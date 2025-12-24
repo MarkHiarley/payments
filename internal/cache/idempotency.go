@@ -1,4 +1,4 @@
-package middleware
+package cache
 
 import (
 	"context"
@@ -19,7 +19,7 @@ func NewRedisTransactionStore(dbr *redis.Client) *RedisTransactionStore {
 
 func (rts *RedisTransactionStore) IsNew(ctx context.Context, key string, value string) (bool, error) {
 
-	success, err := rts.dbr.SetNX(ctx, key, "PROCESSING", 1*time.Minute).Result()
+	success, err := rts.dbr.SetNX(ctx, key, "PROCESSING", 30*time.Second).Result()
 
 	if err != nil {
 		return false, err
@@ -30,4 +30,12 @@ func (rts *RedisTransactionStore) IsNew(ctx context.Context, key string, value s
 
 func (rts *RedisTransactionStore) Delete(ctx context.Context, key string) error {
 	return rts.dbr.Del(ctx, key).Err()
+}
+
+func (rts *RedisTransactionStore) Get(ctx context.Context, key string) *redis.StringCmd {
+	return rts.dbr.Get(ctx, key)
+}
+
+func (rts *RedisTransactionStore) SetStatusCompleted(ctx context.Context, key string) *redis.StatusCmd {
+	return rts.dbr.Set(ctx, key, "COMPLETED", 10*time.Second)
 }
