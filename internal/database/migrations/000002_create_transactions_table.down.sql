@@ -11,4 +11,8 @@ DROP INDEX IF EXISTS idx_transactions_type;
 
 DROP INDEX IF EXISTS idx_transactions_from_status;
 
+ALTER TABLE IF EXISTS transactions DROP CONSTRAINT IF EXISTS fk_from_account;
+
+ALTER TABLE IF EXISTS transactions DROP CONSTRAINT IF EXISTS fk_to_account;
+
 DROP TABLE IF EXISTS transactions;

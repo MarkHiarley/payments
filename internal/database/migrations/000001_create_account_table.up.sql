@@ -4,7 +4,7 @@ CREATE TABLE account(
     balance BIGINT NOT NULL CHECK (balance >= 0),
     user_name VARCHAR(120) NOT NULL,
     user_cpf_cnpj VARCHAR(14) UNIQUE NOT NULL, 
-    user_email VARCHAR(120) NOT NULL,
+    user_email VARCHAR(120) NOT NULL UNIQUE,
     blocked BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 

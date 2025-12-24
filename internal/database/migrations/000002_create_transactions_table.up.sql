@@ -1,13 +1,17 @@
 CREATE TABLE transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    external_id VARCHAR(255) NOT NULL,
+    external_id VARCHAR(255) NOT NULL UNIQUE,
     from_account_id UUID NOT NULL,
-    to_account_id UUID NOT NULL,
+    to_account_id UUID NOT NULL ,
     type VARCHAR(50) NOT NULL,
-    amount BIGINT NOT NULL CHECK (amount > 0),
+    amount BIGINT NOT NULL CHECK (amount >= 1 ),
     currency VARCHAR(10) NOT NULL,
     status VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+
+    CONSTRAINT fk_from_account FOREIGN KEY (from_account_id) REFERENCES account(id),
+    CONSTRAINT fk_to_account FOREIGN KEY (to_account_id) REFERENCES account(id)
 );
 
 
