@@ -23,14 +23,21 @@ func main() {
 	}
 
 	r := gin.Default()
-	repo := repository.NewPostgresTransactionRepository(db)
-	rStore := cache.NewRedisTransactionStore(redisClient)
-	usecase := usecases.NewTransactionUsecase(repo, rStore)
+	repoTrans := repository.NewPostgresTransactionRepository(db)
+	repoAcc := repository.NewPostgresAccountRepository(db)
 
-	controller := controllers.NewTransactionController(usecase)
+	rStore := cache.NewRedisTransactionStore(redisClient)
+
+	usecaseTrans := usecases.NewTransactionUsecase(repoTrans, rStore)
+	usecaseAcc := usecases.NewAccountUseCase(repoAcc)
+
+	controllerTrans := controllers.NewTransactionController(usecaseTrans)
+	controllerAcc := controllers.NewAccountController(usecaseAcc)
+
 	v1 := r.Group("/api/v1")
 	{
-		v1.POST("/transactions", controller.Transfer)
+		v1.POST("/transactions", controllerTrans.Transfer)
+		v1.POST("/accounts", controllerAcc.Create)
 	}
 
 	r.Run(":8080")
