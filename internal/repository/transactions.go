@@ -24,6 +24,7 @@ func NewPostgresTransactionRepository(db *sql.DB) *PostgresTransactionRepository
 func (r *PostgresTransactionRepository) Transfer(ctx context.Context, t *models.Transaction) error {
 
 	tx, err := r.db.BeginTx(ctx, nil)
+	status := "COMPLETED"
 	queryDebito := "UPDATE account SET balance = balance - $1 WHERE id = $2"
 	queryCredito := "UPDATE account SET balance = balance + $1 WHERE id = $2 "
 	queryTransa := `INSERT INTO transactions (
@@ -44,7 +45,7 @@ func (r *PostgresTransactionRepository) Transfer(ctx context.Context, t *models.
 	if _, err := tx.ExecContext(ctx, queryCredito, t.Amount, t.ToAccountID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, queryTransa, t.ExternalID, t.FromAccountID, t.ToAccountID, t.Type, t.Amount, t.Currency, t.Status); err != nil {
+	if _, err := tx.ExecContext(ctx, queryTransa, t.ExternalID, t.FromAccountID, t.ToAccountID, t.Type, t.Amount, t.Currency, status); err != nil {
 		return err
 	}
 

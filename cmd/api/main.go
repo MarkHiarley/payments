@@ -2,10 +2,10 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/markHiarley/payments/internal/cache"
 	"github.com/markHiarley/payments/internal/controllers"
 	db "github.com/markHiarley/payments/internal/database/postgres"
 	"github.com/markHiarley/payments/internal/database/redis"
-	"github.com/markHiarley/payments/internal/middleware"
 	"github.com/markHiarley/payments/internal/repository"
 	"github.com/markHiarley/payments/internal/usecases"
 )
@@ -24,7 +24,7 @@ func main() {
 
 	r := gin.Default()
 	repo := repository.NewPostgresTransactionRepository(db)
-	rStore := middleware.NewRedisTransactionStore(redisClient)
+	rStore := cache.NewRedisTransactionStore(redisClient)
 	usecase := usecases.NewTransactionUsecase(repo, rStore)
 
 	controller := controllers.NewTransactionController(usecase)

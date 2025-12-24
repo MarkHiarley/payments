@@ -2,23 +2,27 @@ package usecases
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
 
-	"github.com/markHiarley/payments/internal/middleware"
+	"github.com/markHiarley/payments/internal/cache"
 	"github.com/markHiarley/payments/internal/models"
 	"github.com/markHiarley/payments/internal/repository"
 )
 
-var ErrDuplicateTransaction = errors.New("transação duplicada ou já em processamento")
+// errors var
+
+var ErrDuplicateTransaction = errors.New("This transaction is still being processed")
+var ErrTransactionConcluded = errors.New("This transaction has already been completed, please wait a moment")
+var ErrTransactionConcludedDB = errors.New("Transaction has already been processed previously (database conflict)")
 
 type TransactionUseCase struct {
 	repo      repository.TransactionRepository
-	rediStore *middleware.RedisTransactionStore
+	rediStore *cache.RedisTransactionStore
 }
 
-func NewTransactionUsecase(repo repository.TransactionRepository, rediStore *middleware.RedisTransactionStore) *TransactionUseCase {
+func NewTransactionUsecase(repo repository.TransactionRepository, rediStore *cache.RedisTransactionStore) *TransactionUseCase {
 	return &TransactionUseCase{
 		repo:      repo,
 		rediStore: rediStore,
@@ -26,24 +30,38 @@ func NewTransactionUsecase(repo repository.TransactionRepository, rediStore *mid
 }
 
 func (r *TransactionUseCase) Transfer(ctx context.Context, t *models.Transaction) error {
-	rawKey := fmt.Sprintf("%s-%s-%d", t.FromAccountID, t.ToAccountID, t.Amount)
 
-	hash := sha256.Sum256([]byte(rawKey))
-
-	idempotencyKey := fmt.Sprintf("%x", hash)
-
-	IsNew, err := r.rediStore.IsNew(ctx, idempotencyKey, "PROCESSING")
-	if err != nil {
-		return fmt.Errorf("erro ao verificar idempotência: %w", err)
-	}
+	IsNew, err := r.rediStore.IsNew(ctx, t.ExternalID, "PROCESSING")
 
 	if !IsNew {
+		status, err := r.rediStore.Get(ctx, t.ExternalID).Result()
+		if err != nil {
+			return ErrDuplicateTransaction
+		}
+
+		if status == "COMPLETED" {
+			return ErrTransactionConcluded
+		}
+
 		return ErrDuplicateTransaction
+
 	}
 
 	if err := r.repo.Transfer(ctx, t); err != nil {
-		_ = r.rediStore.Delete(ctx, idempotencyKey)
-		return fmt.Errorf("erro ao transferir: %w", err)
+		_ = r.rediStore.Delete(ctx, t.ExternalID)
+
+		if strings.Contains(err.Error(), "unique constraint") {
+			return ErrTransactionConcludedDB
+		}
+
+		return fmt.Errorf("error transferring: %w", err)
+	}
+
+	_, err = r.rediStore.SetStatusCompleted(ctx, t.ExternalID).Result()
+
+	if err != nil {
+		_ = r.rediStore.Delete(ctx, t.ExternalID)
+		return fmt.Errorf("error updating transaction status in cache: %w", err)
 	}
 
 	return nil
