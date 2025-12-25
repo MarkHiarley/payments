@@ -9,6 +9,7 @@ import (
 
 type AccountRepository interface {
 	Create(ctx context.Context, a models.Account) (models.Account, error)
+	FindByEmail(ctx context.Context, email string) (models.Account, error)
 }
 
 type PostgresAccountRepository struct {
@@ -39,4 +40,30 @@ func (r *PostgresAccountRepository) Create(ctx context.Context, t models.Account
 	t.Password = ""
 
 	return t, nil
+}
+
+func (r *PostgresAccountRepository) FindByEmail(ctx context.Context, email string) (models.Account, error) {
+	var account models.Account
+	query := `SELECT id, balance, user_name, user_cpf_cnpj, user_email, blocked, created_at 
+	          FROM account 
+	          WHERE user_email = $1`
+
+	err := r.db.QueryRowContext(ctx, query, email).Scan(
+		&account.ID,
+		&account.Balance,
+		&account.UserName,
+		&account.UserCpfCnpj,
+		&account.UserEmail,
+		&account.Blocked,
+		&account.CreatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return models.Account{}, err
+		}
+		return models.Account{}, err
+	}
+
+	return account, nil
 }

@@ -11,58 +11,56 @@ import (
 	"github.com/markHiarley/payments/internal/repository"
 )
 
-// errors var
-
-var ErrDuplicateTransaction = errors.New("This transaction is still being processed")
-var ErrTransactionConcluded = errors.New("This transaction has already been completed, please wait a moment")
-var ErrTransactionConcludedDB = errors.New("Transaction has already been processed previously (database conflict)")
+var (
+	ErrDuplicateTransaction   = errors.New("transaction still being processed")
+	ErrTransactionConcluded   = errors.New("transaction already completed")
+	ErrTransactionConcludedDB = errors.New("transaction conflict in database")
+	ErrAccountNotFound        = errors.New("origin account not found for this user")
+)
 
 type TransactionUseCase struct {
 	repo      repository.TransactionRepository
+	accRepo   repository.AccountRepository
 	rediStore *cache.RedisTransactionStore
 }
 
-func NewTransactionUsecase(repo repository.TransactionRepository, rediStore *cache.RedisTransactionStore) *TransactionUseCase {
+func NewTransactionUsecase(repo repository.TransactionRepository, accRepo repository.AccountRepository, rediStore *cache.RedisTransactionStore) *TransactionUseCase {
 	return &TransactionUseCase{
 		repo:      repo,
+		accRepo:   accRepo,
 		rediStore: rediStore,
 	}
 }
 
-func (r *TransactionUseCase) Transfer(ctx context.Context, t *models.Transaction) error {
+func (r *TransactionUseCase) Transfer(ctx context.Context, t *models.Transaction, email string) error {
 
-	IsNew, err := r.rediStore.IsNew(ctx, t.ExternalID, "PROCESSING")
+	acc, err := r.accRepo.FindByEmail(ctx, email)
+	if err != nil {
+		return ErrAccountNotFound
+	}
+	t.FromAccountID = acc.ID
 
-	if !IsNew {
-		status, err := r.rediStore.Get(ctx, t.ExternalID).Result()
-		if err != nil {
-			return ErrDuplicateTransaction
-		}
+	isNew, err := r.rediStore.IsNew(ctx, t.ExternalID, "PROCESSING")
+	if err != nil {
+		return fmt.Errorf("idempotency check failed: %w", err)
+	}
 
+	if !isNew {
+		status, _ := r.rediStore.Get(ctx, t.ExternalID).Result()
 		if status == "COMPLETED" {
 			return ErrTransactionConcluded
 		}
-
 		return ErrDuplicateTransaction
-
 	}
 
 	if err := r.repo.Transfer(ctx, t); err != nil {
 		_ = r.rediStore.Delete(ctx, t.ExternalID)
-
 		if strings.Contains(err.Error(), "unique constraint") {
 			return ErrTransactionConcludedDB
 		}
-
-		return fmt.Errorf("error transferring: %w", err)
+		return err
 	}
 
-	_, err = r.rediStore.SetStatusCompleted(ctx, t.ExternalID).Result()
-
-	if err != nil {
-		_ = r.rediStore.Delete(ctx, t.ExternalID)
-		return fmt.Errorf("error updating transaction status in cache: %w", err)
-	}
-
+	_ = r.rediStore.SetStatusCompleted(ctx, t.ExternalID)
 	return nil
 }

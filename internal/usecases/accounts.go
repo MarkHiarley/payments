@@ -41,3 +41,7 @@ func (u *AccountUseCase) Create(ctx context.Context, t models.Account) (models.A
 
 	return account, nil
 }
+
+func (u *AccountUseCase) FindByEmail(ctx context.Context, email string) (models.Account, error) {
+	return u.repo.FindByEmail(ctx, email)
+}

@@ -13,43 +13,38 @@ type TransactionController struct {
 	usecase *usecases.TransactionUseCase
 }
 
-func NewTransactionController(uc *usecases.TransactionUseCase) *TransactionController {
-	return &TransactionController{
-		usecase: uc,
-	}
+func NewTransactionController(usecase *usecases.TransactionUseCase) *TransactionController {
+	return &TransactionController{usecase: usecase}
 }
 
 func (tc *TransactionController) Transfer(c *gin.Context) {
-	var input models.Transaction
 
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+	userEmail, exists := c.Get("email")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated user"})
 		return
 	}
 
-	if err := tc.usecase.Transfer(c.Request.Context(), &input); err != nil {
+	var input models.Transaction
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json: " + err.Error()})
+		return
+	}
 
+	if err := tc.usecase.Transfer(c.Request.Context(), &input, userEmail.(string)); err != nil {
 		if errors.Is(err, usecases.ErrDuplicateTransaction) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error":   "Duplicate transaction",
-				"message": err.Error(),
-			})
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
 
 		if errors.Is(err, usecases.ErrTransactionConcluded) || errors.Is(err, usecases.ErrTransactionConcludedDB) {
-			c.JSON(http.StatusOK, gin.H{
-				"error":   "Transaction already completed",
-				"message": err.Error(),
-			})
+			c.JSON(http.StatusOK, gin.H{"message": "transaction already processed"})
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Transaction processed successfully",
-	})
+	c.JSON(http.StatusCreated, gin.H{"message": "transaction processed successfully"})
 }

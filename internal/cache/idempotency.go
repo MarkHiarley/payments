@@ -36,6 +36,6 @@ func (rts *RedisTransactionStore) Get(ctx context.Context, key string) *redis.St
 	return rts.dbr.Get(ctx, key)
 }
 
-func (rts *RedisTransactionStore) SetStatusCompleted(ctx context.Context, key string) *redis.StatusCmd {
-	return rts.dbr.Set(ctx, key, "COMPLETED", 10*time.Second)
+func (rts *RedisTransactionStore) SetStatusCompleted(ctx context.Context, key string) error {
+	return rts.dbr.Set(ctx, key, "COMPLETED", 10*time.Second).Err()
 }

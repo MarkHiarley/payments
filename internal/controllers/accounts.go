@@ -13,27 +13,26 @@ type AccountController struct {
 	usecase *usecases.AccountUseCase
 }
 
-func NewAccountController(uc *usecases.AccountUseCase) *AccountController {
+func NewAccountController(usecase *usecases.AccountUseCase) *AccountController {
 	return &AccountController{
-		usecase: uc,
+		usecase: usecase,
 	}
 }
 
 func (ac *AccountController) Create(c *gin.Context) {
-	var body models.Account
+	var input models.Account
 
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "JSON inválido: " + err.Error()})
 		return
 	}
 
-	account, err := ac.usecase.Create(c.Request.Context(), body)
+	account, err := ac.usecase.Create(c.Request.Context(), input)
 	if err != nil {
-
 		if errors.Is(err, usecases.ErrAccountAlreadyExists) {
 			c.JSON(http.StatusConflict, gin.H{
-				"error":   "Account already exists",
-				"message": err.Error(),
+				"error":   "Conta já existe",
+				"message": "Email ou CPF/CNPJ já cadastrado",
 			})
 			return
 		}
@@ -43,7 +42,7 @@ func (ac *AccountController) Create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "Account created successfully",
+		"message": "Conta criada com sucesso",
 		"account": account,
 	})
 }
