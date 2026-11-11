@@ -31,7 +31,7 @@ func (uc *LoginUseCase) AuthenticateUser(body models.LoginUser) (string, string,
 		return "", "", err
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(body.Password)); err != nil {
+	if err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(body.Password)); err != nil {
 		return "", "", apperr.Unauthorized(apperr.CodeUnauthorized, "credenciais inválidas")
 	}
 

@@ -138,13 +138,13 @@ func newTestDB(t *testing.T) *sql.DB {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := admin.PingContext(ctx); err != nil {
+	if err = admin.PingContext(ctx); err != nil {
 		_ = admin.Close()
 		t.Skipf("postgres indisponível: %v", err)
 	}
 
 	schema := "test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err := admin.ExecContext(context.Background(), "CREATE SCHEMA "+schema); err != nil {
+	if _, err = admin.ExecContext(context.Background(), "CREATE SCHEMA "+schema); err != nil {
 		_ = admin.Close()
 		t.Skipf("não foi possível criar o schema de teste: %v", err)
 	}
@@ -165,7 +165,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	ddlCtx, cancelDDL := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelDDL()
 
-	if _, err := scoped.ExecContext(ddlCtx, testSchemaDDL); err != nil {
+	if _, err = scoped.ExecContext(ddlCtx, testSchemaDDL); err != nil {
 		t.Fatalf("create test tables: %v", err)
 	}
 
