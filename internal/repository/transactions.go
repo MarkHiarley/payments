@@ -3,8 +3,12 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
+
+	"github.com/google/uuid"
 
 	"github.com/markHiarley/payments/internal/models"
+	"github.com/markHiarley/payments/internal/platform/apperr"
 	"github.com/markHiarley/payments/internal/platform/pgxerr"
 )
 
@@ -28,7 +32,18 @@ func (r *PostgresTransactionRepository) Transfer(ctx context.Context, t *models.
 		return pgxerr.Translate(err)
 	}
 
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	// Existence of both accounts is checked before any balance rule so a
+	// missing counterpart always reports ACCOUNT_NOT_FOUND, never 422.
+	if err := lockAccount(ctx, tx, t.FromAccountID, "origem"); err != nil {
+		return err
+	}
+	if err := lockAccount(ctx, tx, t.ToAccountID, "destino"); err != nil {
+		return err
+	}
 
 	status := "COMPLETED"
 	queryDebito := "UPDATE account SET balance = balance - $1 WHERE id = $2"
@@ -51,6 +66,20 @@ func (r *PostgresTransactionRepository) Transfer(ctx context.Context, t *models.
 	}
 
 	if err := tx.Commit(); err != nil {
+		return pgxerr.Translate(err)
+	}
+
+	return nil
+}
+
+func lockAccount(ctx context.Context, tx *sql.Tx, id uuid.UUID, role string) error {
+	var locked uuid.UUID
+
+	err := tx.QueryRowContext(ctx, "SELECT id FROM account WHERE id = $1 FOR SHARE", id).Scan(&locked)
+	if errors.Is(err, sql.ErrNoRows) {
+		return apperr.NotFound(apperr.CodeAccountNotFound, "conta de "+role+" não encontrada")
+	}
+	if err != nil {
 		return pgxerr.Translate(err)
 	}
 

@@ -20,19 +20,19 @@ func (uc *UserController) GetProfile(c *gin.Context) {
 	email, ok := c.Get("email")
 	userEmail, isString := email.(string)
 	if !ok || !isString {
-		c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "usuário não autenticado"))
+		_ = c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "usuário não autenticado"))
 		return
 	}
 
 	rawClaims, ok := c.Get("claims")
 	if !ok {
-		c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "credenciais de sessão ausentes"))
+		_ = c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "credenciais de sessão ausentes"))
 		return
 	}
 
 	jwtClaims, ok := rawClaims.(*models.JWTClaims)
 	if !ok {
-		c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "credenciais de sessão inválidas"))
+		_ = c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "credenciais de sessão inválidas"))
 		return
 	}
 

@@ -36,7 +36,7 @@ func ConnectDB() (*sql.DB, error) {
 
 	err = db.Ping()
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 

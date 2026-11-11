@@ -24,13 +24,13 @@ func (lc *LoginController) AuthenticateUser(c *gin.Context) {
 	var input models.LoginUser
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.Error(httpapi.BindError(err))
+		_ = c.Error(httpapi.BindError(err))
 		return
 	}
 
 	accessToken, refreshToken, err := lc.usecase.AuthenticateUser(input)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 

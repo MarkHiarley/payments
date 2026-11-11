@@ -37,7 +37,7 @@ func GenerateAccessToken(email string) (string, error) {
 	tokenToString, err := accessToken.SignedString(JWT_SECRET_TOKEN)
 
 	if err != nil {
-		return "", fmt.Errorf("erro ao assinar token: %v", err)
+		return "", fmt.Errorf("erro ao assinar token: %w", err)
 	}
 
 	return tokenToString, nil
@@ -58,7 +58,7 @@ func GenerateRefreshToken(email string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenToString, err := token.SignedString([]byte(JWT_SECRET_TOKEN))
 	if err != nil {
-		return "", fmt.Errorf("erro ao assinar token: %v", err)
+		return "", fmt.Errorf("erro ao assinar token: %w", err)
 	}
 
 	return tokenToString, nil
@@ -74,7 +74,7 @@ func ValidateToken(tokenString string) (*models.JWTClaims, error) {
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("erro ao validar token: %v", err)
+		return nil, fmt.Errorf("erro ao validar token: %w", err)
 	}
 
 	if claims, ok := token.Claims.(*models.JWTClaims); ok && token.Valid {

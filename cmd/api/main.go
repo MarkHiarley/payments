@@ -1,6 +1,9 @@
 package main
 
 import (
+	"log/slog"
+	"os"
+
 	"github.com/gin-gonic/gin"
 	"github.com/markHiarley/payments/internal/cache"
 	"github.com/markHiarley/payments/internal/controllers"
@@ -54,6 +57,9 @@ func main() {
 		}
 	}
 
-	r.Run(":8080")
+	if err := r.Run(":8080"); err != nil {
+		slog.Error("failed to start http server", "error", err)
+		os.Exit(1)
+	}
 
 }

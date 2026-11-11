@@ -23,18 +23,18 @@ func (tc *TransactionController) Transfer(c *gin.Context) {
 	userEmail, ok := c.Get("email")
 	email, isString := userEmail.(string)
 	if !ok || !isString {
-		c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "usuário não autenticado"))
+		_ = c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "usuário não autenticado"))
 		return
 	}
 
 	var input models.Transaction
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.Error(httpapi.BindError(err))
+		_ = c.Error(httpapi.BindError(err))
 		return
 	}
 
 	if err := tc.usecase.Transfer(c.Request.Context(), &input, email); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 
