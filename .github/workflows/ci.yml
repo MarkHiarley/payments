@@ -53,14 +53,15 @@ jobs:
     runs-on: ${{ vars.RUNNER_LABEL || 'warp-ubuntu-latest-x64-2x' }}
     env:
       POSTGRES_HOST: localhost
-      POSTGRES_PORT_EXTERNAL: "5432"
+      POSTGRES_PORT_EXTERNAL: "55432"
       POSTGRES_USER: payments
       POSTGRES_PASSWORD: payments
       POSTGRES_DB: payments
       REDIS_HOST: localhost
-      REDIS_PORT: "6379"
+      REDIS_PORT: "56379"
       REDIS_PASSWORD: ""
       JWT_SECRET_TOKEN: change-me
+    # Container ports are fixed off the defaults because self-hosted runners may already have 5432/6379 taken.
     services:
       postgres:
         image: postgres:17
@@ -69,7 +70,7 @@ jobs:
           POSTGRES_PASSWORD: payments
           POSTGRES_DB: payments
         ports:
-          - 5432:5432
+          - 55432:5432
         options: >-
           --health-cmd "pg_isready -U payments -d payments"
           --health-interval 5s
@@ -78,7 +79,7 @@ jobs:
       redis:
         image: redis:7-alpine
         ports:
-          - 6379:6379
+          - 56379:6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s
@@ -101,7 +102,7 @@ jobs:
             -database "$POSTGRES_URL" \
             up
         env:
-          POSTGRES_URL: postgres://payments:payments@localhost:5432/payments?sslmode=disable
+          POSTGRES_URL: postgres://payments:payments@localhost:55432/payments?sslmode=disable
 
       - name: Test
         run: go test -race -count=1 -coverprofile=coverage.out ./...
