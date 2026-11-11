@@ -3,6 +3,8 @@ SHELL := /bin/bash
 MIGRATIONS_DIR := internal/database/migrations
 MIGRATE_IMAGE  ?= migrate/migrate:v4.18.3
 COVERAGE_FILE  := coverage.out
+# Must match the golangci-lint version in .github/workflows/ci.yml; bump both together.
+GOLANGCI_LINT_VERSION ?= v2.1.6
 
 # Reuse the same values as docker compose. Missing .env is fine: defaults below match .env.example.
 -include .env
@@ -65,7 +67,7 @@ lint: ## Check formatting and run go vet + golangci-lint
 		echo "gofmt required on:"; echo "$$unformatted"; exit 1; \
 	fi
 	go vet ./...
-	golangci-lint run --config .golangci.yml
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config .golangci.yml
 
 build: ## Build the api binary into bin/api
 	@mkdir -p bin
