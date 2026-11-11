@@ -2,9 +2,12 @@ package controllers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/markHiarley/payments/internal/models"
+	"github.com/markHiarley/payments/internal/platform/apperr"
 )
 
 type UserController struct{}
@@ -14,21 +17,33 @@ func NewUserController() *UserController {
 }
 
 func (uc *UserController) GetProfile(c *gin.Context) {
-
-	email, exists := c.Get("email")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Usuário não autenticado",
-		})
+	email, ok := c.Get("email")
+	userEmail, isString := email.(string)
+	if !ok || !isString {
+		c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "usuário não autenticado"))
 		return
 	}
 
-	claims, _ := c.Get("claims")
-	jwtClaims := claims.(*models.JWTClaims)
+	rawClaims, ok := c.Get("claims")
+	if !ok {
+		c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "credenciais de sessão ausentes"))
+		return
+	}
+
+	jwtClaims, ok := rawClaims.(*models.JWTClaims)
+	if !ok {
+		c.Error(apperr.Unauthorized(apperr.CodeUnauthorized, "credenciais de sessão inválidas"))
+		return
+	}
+
+	var expiresAt time.Time
+	if jwtClaims.ExpiresAt != nil {
+		expiresAt = jwtClaims.ExpiresAt.Time
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"email":      email,
-		"expires_at": jwtClaims.ExpiresAt.Time,
+		"email":      userEmail,
+		"expires_at": expiresAt,
 		"message":    "Perfil do usuário autenticado",
 	})
 }

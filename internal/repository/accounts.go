@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/markHiarley/payments/internal/models"
+	"github.com/markHiarley/payments/internal/platform/pgxerr"
 )
 
 type AccountRepository interface {
@@ -34,7 +36,7 @@ func (r *PostgresAccountRepository) Create(ctx context.Context, t models.Account
 	)
 
 	if err != nil {
-		return models.Account{}, err
+		return models.Account{}, pgxerr.Translate(err)
 	}
 
 	t.Password = ""
@@ -59,10 +61,10 @@ func (r *PostgresAccountRepository) FindByEmail(ctx context.Context, email strin
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return models.Account{}, err
 		}
-		return models.Account{}, err
+		return models.Account{}, pgxerr.Translate(err)
 	}
 
 	return account, nil

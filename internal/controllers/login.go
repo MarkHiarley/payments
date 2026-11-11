@@ -4,7 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/markHiarley/payments/internal/models"
+	"github.com/markHiarley/payments/internal/platform/httpapi"
 	"github.com/markHiarley/payments/internal/usecases"
 )
 
@@ -22,18 +24,13 @@ func (lc *LoginController) AuthenticateUser(c *gin.Context) {
 	var input models.LoginUser
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Dados inválidos",
-			"details": err.Error(),
-		})
+		c.Error(httpapi.BindError(err))
 		return
 	}
 
 	accessToken, refreshToken, err := lc.usecase.AuthenticateUser(input)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Credenciais inválidas",
-		})
+		c.Error(err)
 		return
 	}
 

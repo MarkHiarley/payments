@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/markHiarley/payments/internal/models"
+	"github.com/markHiarley/payments/internal/platform/pgxerr"
 )
 
 type TransactionRepository interface {
@@ -22,8 +23,13 @@ func NewPostgresTransactionRepository(db *sql.DB) *PostgresTransactionRepository
 }
 
 func (r *PostgresTransactionRepository) Transfer(ctx context.Context, t *models.Transaction) error {
-
 	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return pgxerr.Translate(err)
+	}
+
+	defer tx.Rollback()
+
 	status := "COMPLETED"
 	queryDebito := "UPDATE account SET balance = balance - $1 WHERE id = $2"
 	queryCredito := "UPDATE account SET balance = balance + $1 WHERE id = $2 "
@@ -32,22 +38,21 @@ func (r *PostgresTransactionRepository) Transfer(ctx context.Context, t *models.
             type, amount, currency, status
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
-	if err != nil {
-		return err
-	}
-
-	defer tx.Rollback()
-
 	if _, err := tx.ExecContext(ctx, queryDebito, t.Amount, t.FromAccountID); err != nil {
-		return err
+		return pgxerr.Translate(err)
 	}
 
 	if _, err := tx.ExecContext(ctx, queryCredito, t.Amount, t.ToAccountID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, queryTransa, t.ExternalID, t.FromAccountID, t.ToAccountID, t.Type, t.Amount, t.Currency, status); err != nil {
-		return err
+		return pgxerr.Translate(err)
 	}
 
-	return tx.Commit()
+	if _, err := tx.ExecContext(ctx, queryTransa, t.ExternalID, t.FromAccountID, t.ToAccountID, t.Type, t.Amount, t.Currency, status); err != nil {
+		return pgxerr.Translate(err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return pgxerr.Translate(err)
+	}
+
+	return nil
 }

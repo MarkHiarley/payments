@@ -24,6 +24,8 @@ func main() {
 	}
 
 	r := gin.Default()
+	r.Use(middleware.ErrorHandler())
+
 	repoTrans := repository.NewPostgresTransactionRepository(db)
 	repoAcc := repository.NewPostgresAccountRepository(db)
 	repoLog := repository.NewPostgresLoginRepository(db)

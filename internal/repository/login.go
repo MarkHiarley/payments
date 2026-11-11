@@ -2,6 +2,9 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
+
+	"github.com/markHiarley/payments/internal/platform/pgxerr"
 )
 
 type LoginRepository interface {
@@ -24,7 +27,10 @@ func (r *PostgresLoginRepository) AuthenticateUser(email string) (string, error)
 
 	err := r.db.QueryRow(query, email).Scan(&passwordHash)
 	if err != nil {
-		return "", err
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+		return "", pgxerr.Translate(err)
 	}
 
 	return passwordHash, nil
