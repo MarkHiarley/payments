@@ -1,8 +1,9 @@
 name: ci
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
+  # Automatic triggers are off on purpose while runners are not wired up.
+  # Uncomment to restore: push: / pull_request:
 
 permissions:
   contents: read
