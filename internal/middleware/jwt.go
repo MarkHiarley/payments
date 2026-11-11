@@ -1,39 +1,30 @@
 package middleware
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+
 	"github.com/markHiarley/payments/internal/auth"
+	"github.com/markHiarley/payments/internal/platform/apperr"
+	"github.com/markHiarley/payments/internal/platform/httpapi"
 )
 
 func JWTAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Token de autorização não fornecido",
-			})
-			c.Abort()
+			httpapi.WriteProblem(c, apperr.Unauthorized(apperr.CodeUnauthorized, "token de autorização não fornecido"))
 			return
 		}
 
 		tokenString, err := auth.ExtractTokenFromHeader(authHeader)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": err.Error(),
-			})
-			c.Abort()
+			httpapi.WriteProblem(c, apperr.Unauthorized(apperr.CodeUnauthorized, "cabeçalho de autorização inválido"))
 			return
 		}
 
 		claims, err := auth.ValidateToken(tokenString)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Token inválido ou expirado",
-			})
-			c.Abort()
+			httpapi.WriteProblem(c, apperr.Unauthorized(apperr.CodeUnauthorized, "token inválido ou expirado"))
 			return
 		}
 
@@ -54,13 +45,13 @@ func OptionalJWTAuth() gin.HandlerFunc {
 
 		tokenString, err := auth.ExtractTokenFromHeader(authHeader)
 		if err != nil {
-			c.Next()
+			httpapi.WriteProblem(c, apperr.Unauthorized(apperr.CodeUnauthorized, "cabeçalho de autorização inválido"))
 			return
 		}
 
 		claims, err := auth.ValidateToken(tokenString)
 		if err != nil {
-			c.Next()
+			httpapi.WriteProblem(c, apperr.Unauthorized(apperr.CodeUnauthorized, "token inválido ou expirado"))
 			return
 		}
 
