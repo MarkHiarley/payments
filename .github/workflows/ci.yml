@@ -14,7 +14,8 @@ concurrency:
 jobs:
   lint:
     name: lint
-    runs-on: ubuntu-latest
+    # Jobs run on WarpBuild runners by default; set the repository variable RUNNER_LABEL to override (e.g. ubuntu-latest for GitHub-hosted).
+    runs-on: ${{ vars.RUNNER_LABEL || 'warp-ubuntu-latest-x64-2x' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,7 +46,7 @@ jobs:
 
   test:
     name: test
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'warp-ubuntu-latest-x64-2x' }}
     env:
       POSTGRES_HOST: localhost
       POSTGRES_PORT_EXTERNAL: "5432"
@@ -110,7 +111,7 @@ jobs:
 
   build:
     name: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'warp-ubuntu-latest-x64-2x' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
