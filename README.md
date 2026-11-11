@@ -1,238 +1,118 @@
-# 💳 Payments - Sistema de Gerenciamento de Transações
+# payments
 
-Sistema para processamento de transações financeiras com garantia de idempotência usando Redis e PostgreSQL.
+A small Go HTTP service that moves funds between accounts: account creation, JWT login, and an idempotent transfer endpoint. Go 1.25.5, PostgreSQL 17, Redis, Gin, MIT.
 
-## 🚀 Tecnologias
+## What it guarantees today
 
-- **Go 1.21+** - Linguagem principal
-- **PostgreSQL 17** - Banco de dados relacional
-- **Redis Stack** - Cache e controle de idempotência
-- **Docker & Docker Compose** - Containerização
-- **Gin** - Framework HTTP
-- **golang-migrate** - Gerenciamento de migrations
+- **Atomic transfer.** Debit, credit, and the `transactions` insert run in one SQL transaction with `defer tx.Rollback()` and a single `tx.Commit()`. A failure leaves no partial transfer.
+- **No negative balance.** `account.balance` has `CHECK (balance >= 0)`. An insufficient balance aborts the debit and rolls the whole transfer back.
+- **Unique `external_id`.** `transactions.external_id` is `UNIQUE NOT NULL`, so a duplicate cannot be committed even if Redis loses the key.
+- **A bounded idempotency window.** Redis `SETNX` on `external_id` stores `PROCESSING` for **30 s**; on success the key becomes `COMPLETED` with **10 s** TTL. The deduplication guarantee lasts only as long as that TTL; after it, Postgres is the only guard.
 
-## 📋 Pré-requisitos
-
-- Docker & Docker Compose
-- Go 1.21+
-- golang-migrate CLI
-
+## Quickstart
 ```bash
-# Instalar golang-migrate
-go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-```
-
-## ⚙️ Configuração
-
-### 1. Clone e configure
-
-```bash
-git clone https://github.com/seu-usuario/payments.git
-cd payments
-```
-
-### 2. Crie o arquivo `.env`
-
-```env
-POSTGRES_HOST=
-POSTGRES_USER=
-POSTGRES_PASSWORD=
-POSTGRES_DB=payments
-POSTGRES_PORT_EXTERNAL=
-
-API_PORT=
-
-REDIS_PASSWORD=
-REDIS_PORT=
-```
-
-### 3. Inicie os serviços
-
-```bash
-docker-compose up -d
-```
-
-### 4. Execute as migrations
-
-```bash
-chmod +x run-migrations.sh
+cp .env.template .env    # fill in the values below
+docker compose up -d
 ./run-migrations.sh
 ```
 
-## 🏗️ Arquitetura
-
-O projeto segue **Clean Architecture** com separação clara de responsabilidades:
-
-```
-cmd/
-└── api/main.go              # Entry point da aplicação
-
-internal/
-├── cache/                   # Camada de cache (Redis)
-│   └── idempotency.go       # Controle de duplicação
-│
-├── controllers/             # Camada HTTP (handlers)
-│   └── transactions.go      # Endpoints REST
-│
-├── usecases/                # Camada de Lógica de Negócio
-│   └── transactions.go      # Regras de transferência
-│
-├── repository/              # Camada de Acesso a Dados
-│   └── transaction_repository.go
-│
-├── models/                  # Entidades de Domínio
-│   ├── account.go
-│   └── transaction.go
-│
-└── database/
-    ├── postgres/            # Conexão PostgreSQL
-    ├── redis/               # Conexão Redis
-    └── migrations/          # SQL migrations
-```
-
-### Fluxo de Requisição
-
-```
-┌─────────────┐
-│   Client    │
-└──────┬──────┘
-       │ HTTP Request
-       ▼
-┌─────────────────┐
-│   Controller    │  ← Recebe requisição, valida JSON
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│    UseCase      │  ← Lógica de negócio + Redis (idempotência)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   Repository    │  ← Acessa PostgreSQL
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   PostgreSQL    │
-└─────────────────┘
-```
-
-### Componentes
-
-- **Controllers**: Recebem requisições HTTP e retornam respostas
-- **UseCases**: Contém a lógica de negócio (validações, regras)
-- **Repository**: Interface com o banco de dados
-- **Cache**: Controle de idempotência via Redis
-- **Models**: Estruturas de dados (entidades)
-
-## 🔌 API
-
-### POST /api/v1/transactions
-
-Cria uma nova transação.
-
-**Request:**
-```json
-{
-  "external_id": "TXN-2025-001",
-  "from_account_id": "uuid-origem",
-  "to_account_id": "uuid-destino",
-  "type": "TRANSFER",
-  "amount": 15075,
-  "currency": "BRL",
-  "status": "PENDING"
-}
-```
-
-**Responses:**
-- `201` - Transação criada
-- `409` - Transação duplicada
-- `400` - Dados inválidos
-- `500` - Erro interno
-
-## 🔐 Idempotência
-
-O sistema previne transações duplicadas usando Redis:
-
-1. Cliente envia `external_id` único
-2. Redis verifica se já existe
-3. Se existe: retorna `409 Conflict`
-4. Se não existe: processa e salva no PostgreSQL
-
-**TTL do Cache:**
-- `PROCESSING`: 30 segundos
-- `COMPLETED`: 10 segundos
-
-## 📊 Banco de Dados
-
-### Tabela: account
-```sql
-id, user_name, user_cpf_cnpj, blocked, user_email, created_at
-```
-
-### Tabela: transactions
-```sql
-id, external_id, from_account_id, to_account_id, 
-type, amount, currency, status, created_at
-```
-
-**Índices criados:**
-- `from_account_id` (origem)
-- `to_account_id` (destino)
-- `status` (filtros)
-- `created_at` (ordenação)
-- Composto: `(from_account_id, status)`
-
-## 🛠️ Comandos Úteis
+| Variable | Used for |
+|---|---|
+| `POSTGRES_HOST` | Postgres host (`db` for the Compose API container) |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Postgres credentials and database |
+| `POSTGRES_PORT_EXTERNAL` | Host port for Postgres; also the port migrations connect to |
+| `API_PORT` | Port published by Compose for the API. The binary always listens on `:8080`, so use `API_PORT=8080`. |
+| `REDIS_PASSWORD` | Redis password |
+| `REDIS_PORT` | Host port for Redis |
+| `JWT_SECRET_TOKEN` | HS256 signing secret |
 
 ```bash
-# Iniciar
-docker-compose up -d
+# create an account
+curl -s -X POST localhost:8080/api/v1/accounts \
+  -H 'Content-Type: application/json' \
+  -d '{"user_name":"Ada","user_cpf_cnpj":"12345678901","user_email":"ada@example.com","password":"secret123"}'
 
-# Parar
-docker-compose down
+# log in; copy access_token into $ACCESS_TOKEN
+curl -s -X POST localhost:8080/api/v1/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"ada@example.com","password":"secret123"}'
 
-# Logs
-docker-compose logs -f api
-
-# Migrations
-./run-migrations.sh
-
-# Reverter última migration
-migrate -path ./internal/database/migrations -database "$DB_URL" down 1
+# transfer from the logged-in user's account to another account id
+curl -s -X POST localhost:8080/api/v1/transactions \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"external_id":"txn-0001","to_account_id":"<destination-account-id>","amount":1000,"type":"TRANSFER","currency":"BRL"}'
 ```
 
-## 🐛 Troubleshooting
+## API
+| Method | Path | Auth | Responses |
+|---|---|---|---|
+| `POST` | `/api/v1/accounts` | public | `201` created · `400` invalid JSON · `409` email or CPF/CNPJ already registered · `500` internal |
+| `POST` | `/api/v1/login` | public | `200` access + refresh token · `400` invalid JSON · `401` invalid credentials |
+| `POST` | `/api/v1/transactions` | JWT (`Authorization: Bearer <token>`) | `201` processed · `200` `"transaction already processed"` · `409` `"transaction still being processed"` · `400` invalid JSON · `401` missing/expired token · `500` internal (includes insufficient balance) |
 
-**Erro: Port already in use**
-```bash
-docker-compose down
-sudo lsof -ti:8080 | xargs kill -9
+`from_account_id` in the request body is ignored — the origin is the account of the JWT email. Duplicates that already completed, or that hit the database unique constraint, return `200`; `409` is only a request that arrives while the first one is still inside the 30 s `PROCESSING` window.
+
+## Data model
+```
+account
+  id            UUID PK DEFAULT gen_random_uuid()
+  balance       BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0)
+  user_name     VARCHAR(120) NOT NULL
+  user_cpf_cnpj VARCHAR(14) UNIQUE NOT NULL
+  user_email    VARCHAR(120) UNIQUE NOT NULL
+  password_hash VARCHAR(255) NOT NULL
+  blocked       BOOLEAN DEFAULT FALSE
+  created_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  -- indexes: user_cpf_cnpj, user_email, blocked
+
+transactions
+  id              UUID PK DEFAULT gen_random_uuid()
+  external_id     VARCHAR(255) UNIQUE NOT NULL
+  from_account_id UUID NOT NULL FK -> account(id)
+  to_account_id   UUID NOT NULL FK -> account(id)
+  type            VARCHAR(50) NOT NULL
+  amount          BIGINT NOT NULL CHECK (amount >= 1)
+  currency        VARCHAR(10) NOT NULL
+  status          VARCHAR(50) NOT NULL
+  created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  -- indexes: from_account_id, to_account_id, status, created_at DESC, type, (from_account_id, status)
+```
+Constraints that matter: `balance >= 0`, `amount >= 1`, both foreign keys, and `UNIQUE (external_id)`.
+
+## Architecture
+
+```
+client ──► controller (Gin) ──► usecase ──► repository ──► PostgreSQL
+                                   │
+                                   └──► cache.RedisTransactionStore ──► Redis
 ```
 
-**Erro: Dirty database**
-```bash
-migrate -path ./internal/database/migrations -database "$DB_URL" force 1
-```
+`cmd/api` wires everything; layers live in `internal/` (`auth`, `cache`, `controllers`, `database/{migrations,postgres,redis}`, `middleware`, `models`, `repository`, `usecases`). Migrations are golang-migrate files under `internal/database/migrations/`, applied by `run-migrations.sh`. The transaction usecase depends on a **concrete** `*cache.RedisTransactionStore`, not an interface, so this is a layered design rather than a port/adapter one. It is not Clean Architecture.
 
-## 📝 Variáveis de Ambiente
+## Decisions
 
-| Variável | Descrição |
-|----------|-----------|
-| `POSTGRES_HOST` | Host do PostgreSQL |
-| `POSTGRES_USER` | Usuário do banco |
-| `POSTGRES_PASSWORD` | Senha do banco |
-| `POSTGRES_DB` | Nome do banco |
-| `POSTGRES_PORT_EXTERNAL` | Porta externa |
-| `API_PORT` | Porta da API |
-| `REDIS_PASSWORD` | Senha do Redis |
-| `REDIS_PORT` | Porta do Redis |
+| Decision | Alternative | Why | Cost |
+|---|---|---|---|
+| Redis `SETNX` for idempotency | A `processed_requests` table in Postgres | One atomic round trip on the hot path, before any SQL work. | Keys expire: after 10 s (`COMPLETED`) the cache no longer knows the transaction; the database must catch it. |
+| `balance` as a column | Balance derived from append-only entries | A transfer is two `UPDATE`s plus one insert; reads need no aggregation. | Balance is mutable state; there is no history to replay or audit. |
+| JWT HS256 | RS256 | One shared secret, no key distribution; adequate for a single service. | Every verifier can also mint tokens; no per-service key separation or rotation. |
 
-## 📄 Licença
+## Known limitations
 
-MIT License
+- No tests anywhere in the repository.
+- Idempotency is time-bounded by Redis TTLs (30 s `PROCESSING`, 10 s `COMPLETED`).
+- Duplicate detection relies on `strings.Contains(err.Error(), "unique constraint")` — driver text, not a typed error.
+- Logging is `log.Println` plus Gin defaults; no metrics, no tracing.
+- No reconciliation job comparing transfers with external settlement.
+- `balance` is mutated in place. This is not a ledger.
 
----
+## What I'd do differently in production
 
-**Documentação da API (Swagger)**: Em breve
+- Append-only entries with balance derived or snapshotted.
+- Persisted idempotency records keyed by `external_id` plus a payload hash.
+- Transactional outbox for downstream effects.
+- A versioned OpenAPI contract instead of README payloads.
+
+## License
+MIT — see `LICENSE`.
