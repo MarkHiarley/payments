@@ -97,7 +97,7 @@ jobs:
 
       - name: Apply migrations
         run: |
-          go run github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.3 \
+          go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.3 \
             -path internal/database/migrations \
             -database "$POSTGRES_URL" \
             up
