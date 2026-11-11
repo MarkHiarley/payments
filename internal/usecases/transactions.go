@@ -2,20 +2,16 @@ package usecases
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"fmt"
-	"strings"
+	"log/slog"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/markHiarley/payments/internal/cache"
 	"github.com/markHiarley/payments/internal/models"
+	"github.com/markHiarley/payments/internal/platform/apperr"
 	"github.com/markHiarley/payments/internal/repository"
-)
-
-var (
-	ErrDuplicateTransaction   = errors.New("transaction still being processed")
-	ErrTransactionConcluded   = errors.New("transaction already completed")
-	ErrTransactionConcludedDB = errors.New("transaction conflict in database")
-	ErrAccountNotFound        = errors.New("origin account not found for this user")
 )
 
 type TransactionUseCase struct {
@@ -33,34 +29,46 @@ func NewTransactionUsecase(repo repository.TransactionRepository, accRepo reposi
 }
 
 func (r *TransactionUseCase) Transfer(ctx context.Context, t *models.Transaction, email string) error {
-
 	acc, err := r.accRepo.FindByEmail(ctx, email)
 	if err != nil {
-		return ErrAccountNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			return apperr.NotFound(apperr.CodeAccountNotFound, "conta de origem não encontrada")
+		}
+		return err
 	}
 	t.FromAccountID = acc.ID
 
 	isNew, err := r.rediStore.IsNew(ctx, t.ExternalID, "PROCESSING")
 	if err != nil {
-		return fmt.Errorf("idempotency check failed: %w", err)
+		return apperr.Unavailable(apperr.CodeServiceUnavailable, "serviço de idempotência indisponível")
 	}
 
 	if !isNew {
-		status, _ := r.rediStore.Get(ctx, t.ExternalID).Result()
-		if status == "COMPLETED" {
-			return ErrTransactionConcluded
+		status, err := r.rediStore.Get(ctx, t.ExternalID).Result()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			return apperr.Unavailable(apperr.CodeServiceUnavailable, "serviço de idempotência indisponível")
 		}
-		return ErrDuplicateTransaction
+
+		if status == string(models.Completed) {
+			return apperr.Conflict(apperr.CodeDuplicateExternalID, "transação já processada para este external_id")
+		}
+		return apperr.Conflict(apperr.CodeIdempotency, "transação com este external_id já está em processamento")
 	}
 
 	if err := r.repo.Transfer(ctx, t); err != nil {
-		_ = r.rediStore.Delete(ctx, t.ExternalID)
-		if strings.Contains(err.Error(), "unique constraint") {
-			return ErrTransactionConcludedDB
+		if delErr := r.rediStore.Delete(ctx, t.ExternalID); delErr != nil {
+			slog.Warn("failed to release idempotency key", "external_id", t.ExternalID, "error", delErr)
+		}
+
+		if appErr := apperr.From(err); appErr.Kind == apperr.KindConflict && appErr.Meta["field"] == "external_id" {
+			return apperr.Conflict(apperr.CodeDuplicateExternalID, "transação já processada para este external_id")
 		}
 		return err
 	}
 
-	_ = r.rediStore.SetStatusCompleted(ctx, t.ExternalID)
+	if err := r.rediStore.SetStatusCompleted(ctx, t.ExternalID); err != nil {
+		slog.Warn("failed to mark idempotency key as completed", "external_id", t.ExternalID, "error", err)
+	}
+
 	return nil
 }

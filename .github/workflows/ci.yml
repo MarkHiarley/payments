@@ -1,0 +1,131 @@
+name: ci
+
+on:
+  workflow_dispatch:
+  # Jobs stay skipped until the pull request gets the label run-ci; the labeled event re-runs this workflow.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-ci')
+    # Jobs run on WarpBuild runners by default; set the repository variable RUNNER_LABEL to override (e.g. ubuntu-latest for GitHub-hosted).
+    runs-on: ${{ vars.RUNNER_LABEL || 'warp-ubuntu-latest-x64-2x' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt required on:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.15.0
+          args: --config=.golangci.yml
+
+  test:
+    name: test
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-ci')
+    runs-on: ${{ vars.RUNNER_LABEL || 'warp-ubuntu-latest-x64-2x' }}
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT_EXTERNAL: "55432"
+      POSTGRES_USER: payments
+      POSTGRES_PASSWORD: payments
+      POSTGRES_DB: payments
+      REDIS_HOST: localhost
+      REDIS_PORT: "56379"
+      REDIS_PASSWORD: ""
+      JWT_SECRET_TOKEN: change-me
+    # Container ports are fixed off the defaults because self-hosted runners may already have 5432/6379 taken.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: payments
+          POSTGRES_PASSWORD: payments
+          POSTGRES_DB: payments
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U payments -d payments"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Apply migrations
+        run: |
+          go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.3 \
+            -path internal/database/migrations \
+            -database "$POSTGRES_URL" \
+            up
+        env:
+          POSTGRES_URL: postgres://payments:payments@localhost:55432/payments?sslmode=disable
+
+      - name: Test
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+
+      # Printed to the log instead of uploaded: artifact storage can be exhausted (quota errors fail the job).
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -n 1
+
+  build:
+    name: build
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-ci')
+    runs-on: ${{ vars.RUNNER_LABEL || 'warp-ubuntu-latest-x64-2x' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: |
+          mkdir -p bin
+          go build -o bin/api ./cmd/api
