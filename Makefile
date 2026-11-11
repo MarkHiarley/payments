@@ -21,7 +21,7 @@ POSTGRES_PORT_EXTERNAL ?= 5432
 MIGRATE_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT_EXTERNAL)/$(POSTGRES_DB)?sslmode=disable
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs migrate migrate-down test test-race cover lint build fmt run e2e
+.PHONY: help up up-fast down logs migrate migrate-down test test-race cover lint build fmt run e2e
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -31,7 +31,10 @@ help: ## List available targets
 	@cp -n .env.example .env
 	@echo "Created .env from .env.example — edit it if you need different credentials."
 
-up: .env ## Create .env if missing, then start the whole stack in the background
+up: .env ## Create .env if missing, rebuild the api image, then start the stack
+	docker compose up -d --build
+
+up-fast: ## Start without rebuilding (uses the cached image)
 	docker compose up -d
 
 down: ## Stop and remove containers (the pgdata volume is kept)
