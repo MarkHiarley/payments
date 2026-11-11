@@ -3,8 +3,9 @@ SHELL := /bin/bash
 MIGRATIONS_DIR := internal/database/migrations
 MIGRATE_IMAGE  ?= migrate/migrate:v4.18.3
 COVERAGE_FILE  := coverage.out
-# Must match the golangci-lint version in .github/workflows/ci.yml; bump both together.
-GOLANGCI_LINT_VERSION ?= v2.1.6
+# Must match .github/workflows/ci.yml. The build must be compiled with Go >= 1.25
+# (go.mod targets 1.25.5); older builds refuse to analyze the module. Bump both together.
+GOLANGCI_LINT_VERSION ?= v2.15.0
 
 # Reuse the same values as docker compose. Missing .env is fine: defaults below match .env.example.
 -include .env
