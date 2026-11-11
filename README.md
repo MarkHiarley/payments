@@ -11,7 +11,7 @@ A small Go HTTP service that moves funds between accounts: account creation, JWT
 
 ## Quickstart
 ```bash
-cp .env.template .env    # fill in the values below
+cp .env.template .env    # set every value in the table below; the template omits REDIS_HOST
 docker compose up -d
 ./run-migrations.sh
 ```
@@ -22,6 +22,7 @@ docker compose up -d
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Postgres credentials and database |
 | `POSTGRES_PORT_EXTERNAL` | Host port for Postgres; also the port migrations connect to |
 | `API_PORT` | Port published by Compose for the API. The binary always listens on `:8080`, so use `API_PORT=8080`. |
+| `REDIS_HOST` | Redis host: `redis` when the API runs in Compose (Compose sets it explicitly), `localhost` when running on the host. The template omits this key. |
 | `REDIS_PASSWORD` | Redis password |
 | `REDIS_PORT` | Host port for Redis |
 | `JWT_SECRET_TOKEN` | HS256 signing secret |
@@ -31,12 +32,10 @@ docker compose up -d
 curl -s -X POST localhost:8080/api/v1/accounts \
   -H 'Content-Type: application/json' \
   -d '{"user_name":"Ada","user_cpf_cnpj":"12345678901","user_email":"ada@example.com","password":"secret123"}'
-
 # log in; copy access_token into $ACCESS_TOKEN
 curl -s -X POST localhost:8080/api/v1/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"ada@example.com","password":"secret123"}'
-
 # transfer from the logged-in user's account to another account id
 curl -s -X POST localhost:8080/api/v1/transactions \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -81,7 +80,6 @@ transactions
 Constraints that matter: `balance >= 0`, `amount >= 1`, both foreign keys, and `UNIQUE (external_id)`.
 
 ## Architecture
-
 ```
 client ──► controller (Gin) ──► usecase ──► repository ──► PostgreSQL
                                    │
@@ -94,7 +92,7 @@ client ──► controller (Gin) ──► usecase ──► repository ──�
 
 | Decision | Alternative | Why | Cost |
 |---|---|---|---|
-| Redis `SETNX` for idempotency | A `processed_requests` table in Postgres | One atomic round trip on the hot path, before any SQL work. | Keys expire: after 10 s (`COMPLETED`) the cache no longer knows the transaction; the database must catch it. |
+| Redis `SETNX` for idempotency | A `processed_requests` table in Postgres | One atomic check after the account lookup (`FindByEmail`) resolves the origin account; it blocks duplicate write transactions, not that initial `SELECT`. | Keys expire: after 10 s (`COMPLETED`) the cache no longer knows the transaction; the database must catch it. |
 | `balance` as a column | Balance derived from append-only entries | A transfer is two `UPDATE`s plus one insert; reads need no aggregation. | Balance is mutable state; there is no history to replay or audit. |
 | JWT HS256 | RS256 | One shared secret, no key distribution; adequate for a single service. | Every verifier can also mint tokens; no per-service key separation or rotation. |
 
@@ -106,6 +104,9 @@ client ──► controller (Gin) ──► usecase ──► repository ──�
 - Logging is `log.Println` plus Gin defaults; no metrics, no tracing.
 - No reconciliation job comparing transfers with external settlement.
 - `balance` is mutated in place. This is not a ledger.
+- `account.blocked` is stored and selected in `FindByEmail`, but the transfer flow never checks it.
+- The idempotency key is the global `external_id`, not scoped per account or tenant, so two clients can collide on the same key.
+- `/login` issues a refresh token, but no endpoint exchanges it for a new access token.
 
 ## What I'd do differently in production
 
