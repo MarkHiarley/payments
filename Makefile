@@ -21,7 +21,7 @@ POSTGRES_PORT_EXTERNAL ?= 5432
 MIGRATE_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT_EXTERNAL)/$(POSTGRES_DB)?sslmode=disable
 
 .DEFAULT_GOAL := help
-.PHONY: help up up-fast down logs migrate migrate-down test test-race cover lint build fmt run e2e
+.PHONY: help up up-fast down logs migrate migrate-down test test-race cover ci-local lint build fmt run e2e
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -63,6 +63,12 @@ test-race: ## Run the test suite with the race detector
 
 cover: ## Run the test suite with coverage and print the total
 	go test -count=1 -coverprofile=$(COVERAGE_FILE) ./...
+	@go tool cover -func=$(COVERAGE_FILE) | tail -n 1
+
+ci-local: ## Mirror the CI test job locally (migrations + race tests + coverage)
+	$(MAKE) migrate
+	# TEST_DATABASE_URL keeps the integration tests from silently skipping.
+	TEST_DATABASE_URL="$(MIGRATE_DB_URL)" go test -race -count=1 -coverprofile=$(COVERAGE_FILE) ./...
 	@go tool cover -func=$(COVERAGE_FILE) | tail -n 1
 
 lint: ## Check formatting and run go vet + golangci-lint
